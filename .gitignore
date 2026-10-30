@@ -1,0 +1,13 @@
+.env
+.env.*
+!.env.example
+data/
+backups/
+workspaces/
+config/agents.json
+__pycache__/
+*.pyc
+.pytest_cache/
+.DS_Store
+*.sqlite*
+.llm-ban.lock

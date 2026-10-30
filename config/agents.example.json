@@ -1,0 +1,9 @@
+{
+  "projects": {"demo": "/workspaces/demo"},
+  "timeout_seconds": 1800,
+  "commands": {
+    "planner": ["python3", "/app/bin/pi_adapter.py", "--role", "planner"],
+    "doer": ["python3", "/app/bin/pi_adapter.py", "--role", "doer"],
+    "tester": ["python3", "/app/bin/pi_adapter.py", "--role", "tester"]
+  }
+}

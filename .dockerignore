@@ -1,0 +1,10 @@
+.git
+.env
+.env.*
+data
+backups
+workspaces
+config/agents.json
+__pycache__
+**/__pycache__
+*.sqlite*

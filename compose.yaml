@@ -1,0 +1,79 @@
+name: llm-ban-pub
+services:
+  # One-shot permissions/bootstrap of the private named volume. No host mounts.
+  init:
+    build:
+      context: .
+      dockerfile: docker/worker.Dockerfile
+    user: "0:0"
+    environment:
+      LLMBAN_DB: /data/llmban.sqlite
+      AGENT_UID: ${LLMBAN_UID:-1000}
+      AGENT_GID: ${LLMBAN_GID:-1000}
+    command: ["sh", "-c", "python3 bin/board.py init && chown -R 33:$$AGENT_GID /data && chmod -R g+rwX /data && chmod 2770 /data"]
+    volumes: ["data:/data"]
+    network_mode: none
+  web:
+    build:
+      context: .
+      dockerfile: docker/web.Dockerfile
+    depends_on:
+      init: {condition: service_completed_successfully}
+    ports: ["${LLMBAN_BIND:-127.0.0.1}:${LLMBAN_PORT:-8080}:8080"]
+    environment:
+      LLMBAN_DB: /data/llmban.sqlite
+      LLMBAN_USERNAME: ${LLMBAN_USERNAME:?Run python3 scripts/configure.py}
+      LLMBAN_PASSWORD: ${LLMBAN_PASSWORD:?Run python3 scripts/configure.py}
+      LLMBAN_COOKIE_SECURE: ${LLMBAN_COOKIE_SECURE:-0}
+    volumes: ["data:/data"]
+    security_opt: ["no-new-privileges:true"]
+    restart: unless-stopped
+  worker:
+    profiles: ["agents"]
+    build:
+      context: .
+      dockerfile: docker/worker.Dockerfile
+    user: "${LLMBAN_UID:-1000}:${LLMBAN_GID:-1000}"
+    init: true
+    depends_on:
+      init: {condition: service_completed_successfully}
+    environment:
+      LLMBAN_DB: /data/llmban.sqlite
+      LLMBAN_CONFIG: /app/config/agents.json
+      LLMBAN_PI_PROVIDER: ${LLMBAN_PI_PROVIDER:-}
+      LLMBAN_PI_MODEL: ${LLMBAN_PI_MODEL:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+      LLMBAN_TELEGRAM_ENABLED: ${LLMBAN_TELEGRAM_ENABLED:-0}
+    volumes:
+      - data:/data
+      - ./config/agents.json:/app/config/agents.json:ro
+      - ${LLMBAN_WORKSPACES:-./workspaces}:/workspaces
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: ["ALL"]
+    stop_grace_period: 20s
+    restart: "on-failure:3"
+  telegram:
+    profiles: ["telegram"]
+    build:
+      context: .
+      dockerfile: docker/worker.Dockerfile
+    user: "${LLMBAN_UID:-1000}:${LLMBAN_GID:-1000}"
+    init: true
+    depends_on:
+      init: {condition: service_completed_successfully}
+    command: ["python3", "bin/telegram_notifier.py"]
+    environment:
+      LLMBAN_DB: /data/llmban.sqlite
+      LLMBAN_TELEGRAM_ENABLED: ${LLMBAN_TELEGRAM_ENABLED:-0}
+      LLMBAN_TELEGRAM_TOKEN: ${LLMBAN_TELEGRAM_TOKEN:-}
+      LLMBAN_TELEGRAM_CHAT_ID: ${LLMBAN_TELEGRAM_CHAT_ID:-}
+      LLMBAN_PUBLIC_URL: ${LLMBAN_PUBLIC_URL:-}
+    volumes: ["data:/data"]
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: ["ALL"]
+    restart: "on-failure:3"
+volumes:
+  data:
