@@ -74,7 +74,13 @@ def main():
                 time.sleep(.5)
             raise AssertionError('Card did not reach ' + column)
         try:
-            run('up', '-d', '--build', 'web', 'worker')
+            # Deterministically create WAL/SHM as the agent UID first. The web
+            # UID must be able to write those same files via the shared group.
+            run('up', '-d', '--build', 'worker')
+            run('exec', '-T', 'worker', 'python3', '-c',
+                'import os; from pathlib import Path; p=Path("/data/llmban.sqlite-shm"); '
+                'assert p.stat().st_uid == os.getuid(), "Worker must create SQLite SHM first"')
+            run('up', '-d', '--build', 'web')
             deadline = time.monotonic() + 45
             while True:
                 try:
