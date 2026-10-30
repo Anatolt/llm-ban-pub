@@ -80,7 +80,7 @@ def main():
             run('exec', '-T', 'worker', 'python3', '-c',
                 'import os; from pathlib import Path; p=Path("/data/llmban.sqlite-shm"); '
                 'assert p.stat().st_uid == os.getuid(), "Worker must create SQLite SHM first"')
-            run('up', '-d', '--build', 'web')
+            run('up', '-d', '--build', '--no-deps', 'web')
             deadline = time.monotonic() + 45
             while True:
                 try:
