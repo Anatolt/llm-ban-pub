@@ -93,6 +93,37 @@ class WebTests(unittest.TestCase):
         with self.request('/api/cards?project=demo') as r:
             self.assertEqual(json.load(r)['cards'][-1]['column_name'], 'llm plan')
 
+    def test_detail_indicator_follows_description(self):
+        token = self.token()
+        for title, description in [('detailed one', 'has text'), ('empty one', ''),
+                                   ('blank one', ' \t\n ')]:
+            with self.request(data={'csrf': token, 'action': 'create', 'title': title,
+                                    'description': description, 'project': 'indicator',
+                                    'column_name': 'man backlog'}):
+                pass
+        with self.request('/api/cards?project=indicator') as r:
+            cards = {card['title']: card['id'] for card in json.load(r)['cards']}
+
+        def shows_indicator(card_id):
+            with self.request('/?project=indicator') as r:
+                html = r.read().decode()
+            block = re.search(rf'<article class="card" draggable="true" data-card-id="{card_id}">(.*?)</article>',
+                              html, re.S)[1]
+            return 'card-detailed' in block
+
+        self.assertTrue(shows_indicator(cards['detailed one']))
+        self.assertFalse(shows_indicator(cards['empty one']))
+        self.assertFalse(shows_indicator(cards['blank one']))
+
+        for title, description, card_id in [('empty one', 'now described', cards['empty one']),
+                                            ('detailed one', '', cards['detailed one'])]:
+            with self.request(data={'csrf': token, 'action': 'update', 'id': card_id, 'title': title,
+                                    'description': description, 'project': 'indicator',
+                                    'column_name': 'man backlog'}):
+                pass
+        self.assertTrue(shows_indicator(cards['empty one']))
+        self.assertFalse(shows_indicator(cards['detailed one']))
+
     def test_unknown_column_rejected(self):
         with self.assertRaises(urllib.error.HTTPError) as ctx:
             self.request(data={'csrf': self.token(), 'action': 'create', 'title': 'bad', 'column_name': 'unknown'})
