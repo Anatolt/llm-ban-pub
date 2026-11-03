@@ -14,7 +14,7 @@ import uuid
 from datetime import datetime, timedelta, timezone
 import socket
 
-from storage import ROOT, connect, db_path, event, initialize, now
+from storage import ROOT, connect, db_path, event, initialize, next_position, now
 
 LOG = logging.getLogger('llmban.worker')
 ROLES = {
@@ -61,7 +61,8 @@ def claim(c, cfg):
             c.execute('''INSERT INTO agent_runs(id,card_id,role,state,original_title,
                 original_description,working_column,created_at)
                 VALUES(:id,:card_id,:role,'running',:original_title,:original_description,:working_column,:created_at)''', run)
-            c.execute('UPDATE cards SET column_name=?,updated_at=? WHERE id=?', (working, now(), card['id']))
+            c.execute('UPDATE cards SET column_name=?,position=?,updated_at=? WHERE id=?',
+                      (working, next_position(c, working), now(), card['id']))
             event(c, card['id'], role + '_started', run['id'])
             lease = (datetime.now(timezone.utc) + timedelta(seconds=int(cfg.get('timeout_seconds', 1800)) + 120)).isoformat()
             workspace = cfg['projects'].get(card['project'], '')
@@ -158,8 +159,8 @@ def finish(c, run, data=None, error=None):
             description = data['new_description'].strip() if success and run['role'] == 'planner' else card['description']
             report = error if error else data.get('report', data['note'])
             description += f"\n\n---\n{run['role']} ({run['id'][:8]}):\n{report}"
-            c.execute('UPDATE cards SET title=?,description=?,column_name=?,updated_at=? WHERE id=?',
-                      (title, description, destination, now(), card['id']))
+            c.execute('UPDATE cards SET title=?,description=?,column_name=?,position=?,updated_at=? WHERE id=?',
+                      (title, description, destination, next_position(c, destination), now(), card['id']))
             state = 'succeeded' if success else 'failed'
         c.execute('UPDATE agent_runs SET state=?,report=?,finished_at=? WHERE id=?', (state, report, now(), run['id']))
         c.execute('UPDATE work_plans SET status=?,current_step=?,updated_at=? WHERE id=?',

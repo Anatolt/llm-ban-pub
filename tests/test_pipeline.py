@@ -34,11 +34,39 @@ class PipelineTests(unittest.TestCase):
         self.c.close()
         self.tmp.cleanup()
 
-    def card(self, column='llm plan', project='demo'):
+    def card(self, column='llm plan', project='demo', position=0):
         with self.c:
-            cur = self.c.execute('''INSERT INTO cards(title,description,column_name,project,created_at,updated_at)
-                VALUES('Make greeting','Write greeting.txt containing hello',?,?,?,?)''', (column, project, now(), now()))
+            cur = self.c.execute('''INSERT INTO cards(title,description,column_name,project,position,created_at,updated_at)
+                VALUES('Make greeting','Write greeting.txt containing hello',?,?,?,?,?)''',
+                (column, project, position, now(), now()))
         return cur.lastrowid
+
+    def titles_in(self, column):
+        return [r[0] for r in self.c.execute('SELECT id FROM cards WHERE column_name=? ORDER BY position,id', (column,))]
+
+    def test_worker_moves_land_at_bottom_of_destination(self):
+        waiting = [self.card('man plan', position=p) for p in (1, 2)]
+        card = self.card('llm plan', position=1)
+        self.assertTrue(worker.process_once(self.c, self.cfg))
+        self.assertEqual(self.titles_in('man plan'), waiting + [card])
+        self.assertEqual(self.get(card)['position'], 3)
+
+    def test_cli_create_appends_to_end_of_column(self):
+        existing = self.card('man backlog', position=1)
+        env = dict(os.environ, LLMBAN_DB=str(self.root / 'board.sqlite'))
+        out = subprocess.run([sys.executable, str(Path(__file__).resolve().parents[1] / 'bin' / 'board.py'),
+                              'create', '--title', 'CLI card', '--column', 'man backlog'],
+                             env=env, capture_output=True, text=True, check=True).stdout
+        created = json.loads(out)['id']
+        self.assertEqual(self.titles_in('man backlog'), [existing, created])
+        self.assertEqual(self.get(created)['position'], 2)
+
+    def test_worker_claims_cards_in_manual_order(self):
+        later = self.card('llm todo', position=2)
+        first = self.card('llm todo', position=1)
+        run = worker.claim(self.c, self.cfg)
+        self.assertEqual(run['card_id'], first)
+        self.assertEqual(self.get(later)['column_name'], 'llm todo')
 
     def get(self, card_id):
         return self.c.execute('SELECT * FROM cards WHERE id=?', (card_id,)).fetchone()
