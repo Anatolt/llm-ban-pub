@@ -67,6 +67,57 @@ function json_ok(array $extra = []): never {
     exit;
 }
 
+function fail(int $code, string $message): never {
+    http_response_code($code);
+    if (wants_json()) {
+        header('Content-Type: application/json; charset=utf-8');
+        echo json_encode(['ok' => false, 'error' => $message], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+    exit($message);
+}
+
+function column_ids(string $column, int $exceptId): array {
+    $stmt = db()->prepare('SELECT id FROM cards WHERE column_name=? AND id<>? ORDER BY position ASC, id ASC');
+    $stmt->execute([$column, $exceptId]);
+    return array_map('intval', $stmt->fetchAll(PDO::FETCH_COLUMN));
+}
+
+function renumber(array $ids): void {
+    $stmt = db()->prepare('UPDATE cards SET position=? WHERE id=?');
+    foreach ($ids as $index => $cardId) $stmt->execute([$index + 1, $cardId]);
+}
+
+// Positions are dense 1..n per column across all projects, so a filtered board
+// can place a card relative to a visible neighbour without disturbing hidden cards.
+function place_card(int $id, string $column, ?int $beforeId): int {
+    $pdo = db();
+    $pdo->exec('BEGIN IMMEDIATE');
+    $card = load_card($id);
+    $reject = null;
+    if (!$card) {
+        $reject = [404, 'Unknown card'];
+    } elseif ($beforeId === $id) {
+        $reject = [422, 'Card cannot be placed before itself'];
+    } elseif ($beforeId !== null) {
+        $before = load_card($beforeId);
+        if (!$before || $before['column_name'] !== $column) $reject = [409, 'Stale position'];
+    }
+    if ($reject) {
+        $pdo->exec('ROLLBACK');
+        fail($reject[0], $reject[1]);
+    }
+    $ids = column_ids($column, $id);
+    $index = $beforeId === null ? count($ids) : (int)array_search($beforeId, $ids, true);
+    array_splice($ids, $index, 0, [$id]);
+    renumber($ids);
+    if ($card['column_name'] !== $column) renumber(column_ids($card['column_name'], $id));
+    $stmt = $pdo->prepare('UPDATE cards SET column_name=?, updated_at=? WHERE id=?');
+    $stmt->execute([$column, now(), $id]);
+    $pdo->exec('COMMIT');
+    return $index + 1;
+}
+
 function event_log(?int $cardId, string $type, string $payload = ''): void {
     $stmt = db()->prepare('INSERT INTO events(card_id,event_type,payload,created_at) VALUES (?,?,?,?)');
     $stmt->execute([$cardId, $type, $payload, now()]);
@@ -285,8 +336,10 @@ function handle_post(array $columns): void {
         $column = normalize_column((string)($_POST['column_name'] ?? 'man backlog'), $columns);
         if ($id > 0 && $title !== '') {
             $project = normalize_project((string)($_POST['project'] ?? ''));
-            $stmt = db()->prepare('UPDATE cards SET title=?, description=?, column_name=?, project=?, updated_at=? WHERE id=?');
-            $stmt->execute([$title, $description, $column, $project, now(), $id]);
+            $current = load_card($id);
+            if ($current && $current['column_name'] !== $column) place_card($id, $column, null);
+            $stmt = db()->prepare('UPDATE cards SET title=?, description=?, project=?, updated_at=? WHERE id=?');
+            $stmt->execute([$title, $description, $project, now(), $id]);
             event_log($id, 'update', json_encode(['column' => $column, 'project' => $project], JSON_UNESCAPED_UNICODE));
             redirect_board($project);
         }
@@ -295,15 +348,12 @@ function handle_post(array $columns): void {
     if ($action === 'move') {
         $id = (int)($_POST['id'] ?? 0);
         $column = normalize_column((string)($_POST['column_name'] ?? 'man backlog'), $columns);
-        if ($id > 0) {
-            $stmtMax = db()->prepare('SELECT COALESCE(MAX(position),0)+1 FROM cards WHERE column_name=?');
-            $stmtMax->execute([$column]);
-            $pos = (int)$stmtMax->fetchColumn();
-            $stmt = db()->prepare('UPDATE cards SET column_name=?, position=?, updated_at=? WHERE id=?');
-            $stmt->execute([$column, $pos, now(), $id]);
-            event_log($id, 'move', $column);
-        }
-        if (wants_json()) json_ok(['id' => $id, 'column_name' => $column]);
+        $beforeRaw = trim((string)($_POST['before_id'] ?? ''));
+        $beforeId = $beforeRaw === '' ? null : (int)$beforeRaw;
+        if ($id <= 0 || ($beforeId !== null && $beforeId <= 0)) fail(422, 'Invalid card');
+        $position = place_card($id, $column, $beforeId);
+        event_log($id, 'move', $column);
+        if (wants_json()) json_ok(['id' => $id, 'column_name' => $column, 'position' => $position]);
         redirect_board();
     }
 }
