@@ -418,8 +418,8 @@ $currentWork = $showWork && $workPlanId === '' ? load_current_work($showAllWork)
 *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:14px/1.4 system-ui,-apple-system,Segoe UI,sans-serif}a{color:var(--accent);text-decoration:none}
 header{padding:14px 18px;border-bottom:1px solid var(--line);display:flex;gap:16px;align-items:center;position:sticky;top:0;background:rgba(15,17,21,.96);z-index:3;flex-wrap:wrap}h1{font-size:20px;margin:0}.muted{color:var(--muted)}
 .project-filter{display:flex;gap:6px;align-items:center;flex-wrap:wrap}.project-pill{background:#1b2030;border:1px solid var(--line);border-radius:999px;color:var(--muted);padding:3px 9px}.project-pill:hover,.project-pill.active{background:#28344b;color:var(--text);border-color:#4a5a76}
-.board{display:flex;gap:12px;overflow-x:auto;padding:14px;align-items:flex-start}.col{background:var(--panel);border:1px solid var(--line);border-radius:10px;min-width:280px;width:280px;max-height:calc(100vh - 82px);overflow:auto;transition:min-width .16s ease,width .16s ease,background .16s ease}.col.drag-over{outline:2px solid var(--accent);outline-offset:2px}.col h2{font-size:14px;margin:0;padding:10px 12px;border-bottom:1px solid var(--line);position:sticky;top:0;background:var(--panel);z-index:1}.col-title{display:flex;align-items:center}.col.compact{min-width:54px;width:54px;overflow:hidden;background:#141821}.col.compact h2{height:220px;padding:10px 6px;border-bottom:0;writing-mode:vertical-rl;text-orientation:mixed;justify-content:flex-start;gap:8px;white-space:nowrap}.col.compact .col-count{margin-left:0;color:var(--accent)}.col.compact.drag-over,.col.compact:focus-within{min-width:180px;width:180px;overflow:auto}.col.compact.drag-over h2,.col.compact:focus-within h2{height:auto;writing-mode:horizontal-tb;padding:10px 12px;border-bottom:1px solid var(--line)}
-.card{background:var(--card);border:1px solid var(--line);border-radius:9px;margin:8px;padding:9px;cursor:grab}.card:active{cursor:grabbing}.card.dragging{opacity:.5}.card h3{font-size:14px;line-height:1.25;margin:0;font-weight:normal}.card-title{display:block;color:var(--text)}.card-title:hover{color:var(--accent)}.card-project{display:inline-block;margin-top:6px;color:var(--muted);font-size:12px}.card-detailed{display:inline-block;margin:6px 0 0 6px;padding:0 6px;border:1px solid var(--line);border-radius:999px;color:var(--muted);font-size:11px;line-height:1.6;vertical-align:top}
+.board{display:flex;gap:12px;overflow-x:auto;padding:14px;align-items:flex-start}.col{background:var(--panel);border:1px solid var(--line);border-radius:10px;min-width:280px;width:280px;max-height:calc(100vh - 82px);overflow:auto;transition:min-width .16s ease,width .16s ease,background .16s ease}.col.drag-target{background:#1b2436;transition:background .35s cubic-bezier(.15,1,.3,1)}.col h2{font-size:14px;margin:0;padding:10px 12px;border-bottom:1px solid var(--line);position:sticky;top:0;background:var(--panel);z-index:1}.col-title{display:flex;align-items:center}.col.compact{min-width:54px;width:54px;overflow:hidden;background:#141821}.col.compact h2{height:220px;padding:10px 6px;border-bottom:0;writing-mode:vertical-rl;text-orientation:mixed;justify-content:flex-start;gap:8px;white-space:nowrap}.col.compact .col-count{margin-left:0;color:var(--accent)}.col.compact.drag-over,.col.compact:focus-within{min-width:180px;width:180px;overflow:auto}.col.compact.drag-over h2,.col.compact:focus-within h2{height:auto;writing-mode:horizontal-tb;padding:10px 12px;border-bottom:1px solid var(--line)}
+.card{background:var(--card);border:1px solid var(--line);border-radius:9px;margin:8px;padding:9px;cursor:grab}.card:active{cursor:grabbing}.card.dragging{opacity:.35;outline:2px dashed var(--accent);outline-offset:-2px;background:transparent}.card h3{font-size:14px;line-height:1.25;margin:0;font-weight:normal}.card-title{display:block;color:var(--text)}.card-title:hover{color:var(--accent)}.card-project{display:inline-block;margin-top:6px;color:var(--muted);font-size:12px}.card-detailed{display:inline-block;margin:6px 0 0 6px;padding:0 6px;border:1px solid var(--line);border-radius:999px;color:var(--muted);font-size:11px;line-height:1.6;vertical-align:top}
 .panel{margin:14px;padding:14px;background:var(--panel);border:1px solid var(--line);border-radius:10px;max-width:900px}
 input,textarea,select{width:100%;background:#10131a;color:var(--text);border:1px solid var(--line);border-radius:7px;padding:8px;font:inherit}textarea{min-height:140px;margin-top:10px}.grid{display:grid;gap:10px}.row{display:grid;grid-template-columns:1fr 220px 180px;gap:10px}@media(max-width:800px){.row{grid-template-columns:1fr}.board{padding:8px;gap:8px}.col{min-width:86vw}.col.compact{min-width:46px;width:46px}.col.compact.drag-over,.col.compact:focus-within{min-width:70vw;width:70vw}}
 .modal-overlay{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.6);z-index:9}.panel.modal{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:10;margin:0;width:98vw;height:96vh;max-width:none;box-shadow:0 10px 30px rgba(0,0,0,.5);display:flex;flex-direction:column}.panel.modal form{flex:1;display:flex;flex-direction:column;gap:10px}.panel.modal textarea{flex:1;margin-top:0}
@@ -536,46 +536,84 @@ const base = <?= json_encode(BASE) ?>;
 const boardUrl = <?= json_encode(board_url($activeProject)) ?>;
 let dragged = null;
 
+let origin = null;
+
+function clearDropState() {
+  document.querySelectorAll('.col.drag-over, .col.drag-target').forEach(col => col.classList.remove('drag-over', 'drag-target'));
+}
+
+function cardBelow(col, y) {
+  return [...col.querySelectorAll('.card:not(.dragging)')].find(card => {
+    const rect = card.getBoundingClientRect();
+    return y < rect.top + rect.height / 2;
+  }) || null;
+}
+
+function nextCard(card) {
+  const next = card.nextElementSibling;
+  return next && next.classList.contains('card') ? next : null;
+}
+
 document.querySelectorAll('.card').forEach(card => {
   card.addEventListener('dragstart', event => {
     dragged = card;
+    origin = {parent: card.parentElement, next: nextCard(card)};
     card.classList.add('dragging');
     event.dataTransfer.setData('text/plain', card.dataset.cardId);
     event.dataTransfer.effectAllowed = 'move';
   });
-  card.addEventListener('dragend', () => card.classList.remove('dragging'));
+  card.addEventListener('dragend', () => {
+    card.classList.remove('dragging');
+    if (origin && card.isConnected) origin.parent.insertBefore(card, origin.next);
+    dragged = null;
+    origin = null;
+    clearDropState();
+  });
 });
 
 document.querySelectorAll('.col').forEach(col => {
-  col.addEventListener('dragover', event => {
-    event.preventDefault();
-    col.classList.add('drag-over');
+  col.addEventListener('dragenter', event => {
+    if (dragged) event.preventDefault();
   });
-  col.addEventListener('dragleave', () => col.classList.remove('drag-over'));
+  col.addEventListener('dragover', event => {
+    if (!dragged) return;
+    event.preventDefault();
+    document.querySelectorAll('.col.drag-over, .col.drag-target').forEach(other => {
+      if (other !== col) other.classList.remove('drag-over', 'drag-target');
+    });
+    col.classList.add('drag-over');
+    col.classList.toggle('drag-target', col !== origin.parent);
+    const before = cardBelow(col, event.clientY);
+    if (before) {
+      if (before !== dragged.nextElementSibling) col.insertBefore(dragged, before);
+    } else if (col.lastElementChild !== dragged) {
+      col.appendChild(dragged);
+    }
+  });
   col.addEventListener('drop', async event => {
     event.preventDefault();
-    col.classList.remove('drag-over');
-    const id = event.dataTransfer.getData('text/plain');
-    if (!id) return;
-    await moveCard(id, col.dataset.column);
+    if (!dragged) return;
+    const card = dragged;
+    const before = nextCard(card);
+    origin = null;
+    clearDropState();
+    await moveCard(card.dataset.cardId, col.dataset.column, before ? before.dataset.cardId : '');
   });
 });
 
-async function moveCard(id, column) {
+async function moveCard(id, column, beforeId) {
   const form = new FormData();
   form.append('csrf', <?= json_encode($_SESSION['csrf']) ?>);
   form.append('action', 'move');
   form.append('id', id);
   form.append('column_name', column);
+  if (beforeId && beforeId !== id) form.append('before_id', beforeId);
   const response = await fetch(base + '/', {
     method: 'POST',
     headers: {'Accept': 'application/json', 'X-Requested-With': 'fetch'},
     body: form
   });
-  if (!response.ok) {
-    alert('move failed');
-    return;
-  }
+  if (!response.ok) console.warn('move rejected', response.status);
   location.href = boardUrl;
 }
 </script>

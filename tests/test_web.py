@@ -145,11 +145,6 @@ class WebTests(unittest.TestCase):
         finally:
             c.close()
 
-
-if __name__ == '__main__':
-    unittest.main()
-
-
     def create(self, token, title, column, project):
         with self.request(data={'csrf': token, 'action': 'create', 'title': title,
                                 'column_name': column, 'project': project}):
@@ -261,27 +256,6 @@ if __name__ == '__main__':
                                 'description': '', 'column_name': 'llm doing', 'project': 'order-edit'}):
             pass
         self.assertEqual(self.titles('order-edit', 'llm doing'), ['e-first renamed', 'e-second', 'e-moved'])
-
-    def test_unknown_column_rejected(self):
-        with self.assertRaises(urllib.error.HTTPError) as ctx:
-            self.request(data={'csrf': self.token(), 'action': 'create', 'title': 'bad', 'column_name': 'unknown'})
-        self.assertEqual(ctx.exception.code, 422)
-        ctx.exception.close()
-
-    def test_web_waits_for_concurrent_worker_write(self):
-        self.token()  # initialize the schema before taking a write transaction
-        c = sqlite3.connect(Path(self.tmp.name) / 'board.sqlite')
-        try:
-            c.execute('BEGIN IMMEDIATE')
-            with ThreadPoolExecutor(max_workers=1) as pool:
-                future = pool.submit(lambda: self.request('/api/cards'))
-                time.sleep(.15)
-                c.rollback()
-                with future.result(timeout=5) as response:
-                    self.assertIn('cards', json.load(response))
-        finally:
-            c.close()
-
 
 if __name__ == '__main__':
     unittest.main()
