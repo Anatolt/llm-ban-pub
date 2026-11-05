@@ -2,7 +2,7 @@
 """Initialize storage, add cards and inspect runs without HTTP credentials."""
 import argparse
 import json
-from storage import connect, initialize, event, now
+from storage import connect, initialize, event, next_position, now
 
 COLUMNS = ['man backlog', 'llm plan', 'llm planing', 'preflight', 'man plan',
            'llm todo', 'llm doing', 'ready-to-test', 'llm test', 'llm testing',
@@ -30,9 +30,10 @@ def main():
             if args.project and not re.fullmatch('[a-z0-9][a-z0-9-]{0,63}', args.project):
                 p.error('Invalid project slug')
             with c:
-                cursor = c.execute('''INSERT INTO cards(title,description,project,column_name,
-                    created_at,updated_at) VALUES(?,?,?,?,?,?)''',
-                    (args.title, args.description, args.project, args.column, now(), now()))
+                cursor = c.execute('''INSERT INTO cards(title,description,project,column_name,position,
+                    created_at,updated_at) VALUES(?,?,?,?,?,?,?)''',
+                    (args.title, args.description, args.project, args.column,
+                     next_position(c, args.column), now(), now()))
                 event(c, cursor.lastrowid, 'create', 'cli')
             print(json.dumps({'id': cursor.lastrowid}))
         elif args.action == 'runs':

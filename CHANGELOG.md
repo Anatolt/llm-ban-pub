@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+- Manual card ordering: drop a card between others to place it, within a
+  column or across columns. Positions are stored in SQLite, survive reloads
+  and restarts, and are kept for cards hidden by a project filter. Stale or
+  invalid reorder requests are rejected instead of silently appending.
+- Cards moved by the worker and cards created from the CLI now land at the
+  bottom of the destination column instead of keeping an arbitrary position.
+
 ## 0.1.0
 
 First standalone public release, extracted from LLMBAN's PHP kanban and Python

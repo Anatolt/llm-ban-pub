@@ -30,6 +30,10 @@ def initialize(c):
     ensure_schema(c)
 
 
+def next_position(c, column):
+    return c.execute('SELECT COALESCE(MAX(position),0)+1 FROM cards WHERE column_name=?', (column,)).fetchone()[0]
+
+
 def event(c, card_id, kind, payload):
     c.execute('INSERT INTO events(card_id,event_type,payload,created_at) VALUES(?,?,?,?)',
               (card_id, kind, payload, now()))

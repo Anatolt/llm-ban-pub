@@ -65,7 +65,9 @@ outside the standard library.
 | `ready-to-test` or `llm test` | `llm testing` | `man test` — accept manually |
 
 A human moves the reviewed plan to `llm todo` and the accepted result to
-`man done`. Failures go to `man plan` (planner failures to `man backlog`) with a
+`man done`. Drop a card between two others to set its order; the worker picks
+the topmost card and appends the cards it moves to the bottom of the
+destination column. Failures go to `man plan` (planner failures to `man backlog`) with a
 report. There are no automatic retries of implementation. Timeouts stop the
 process group. An interrupted run blocks new work until explicit recovery.
 Generated changes remain in the workspace for review; agents are instructed
