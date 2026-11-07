@@ -3,6 +3,7 @@
 !.env.example
 data/
 backups/
+exports/
 workspaces/
 config/agents.json
 __pycache__/

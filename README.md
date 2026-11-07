@@ -111,6 +111,10 @@ advisory: overlap warnings do not enforce filesystem isolation. Its complete CLI
 is available with `python3 bin/memctl.py --help`; set `MEMCTL_DB`/`LLMBAN_DB` and
 `MEMCTL_SNAPSHOT_ROOT` when integrating your own agents.
 
+Export a human-readable Markdown snapshot with `python3 bin/board.py export`
+(`--project my-app` filters cards; `--output exports/board.md` writes a file).
+See [export instructions](docs/OPERATIONS.md#markdown-export) for Docker usage.
+
 ## Development and operations
 
 ```sh

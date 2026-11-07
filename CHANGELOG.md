@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Read-only Markdown board export via `bin/board.py export`, with optional
+  project filtering, deterministic ordering, UTF-8 stdout and atomic file output.
 - Manual card ordering: drop a card between others to place it, within a
   column or across columns. Positions are stored in SQLite, survive reloads
   and restarts, and are kept for cards hidden by a project filter. Stale or
