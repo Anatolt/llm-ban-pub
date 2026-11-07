@@ -45,6 +45,46 @@ Do not overwrite a live WAL database or reuse its old `-wal`/`-shm` files.
 Verify cards/runs before re-enabling agents. Runs captured as active may need
 explicit recovery after old processes have been confirmed stopped.
 
+## Markdown export
+
+Export all cards or one project without changing cards, events or schema:
+
+```sh
+mkdir -p exports
+python3 bin/board.py export --output exports/board.md
+python3 bin/board.py export --project my-app --output exports/my-app.md
+python3 bin/board.py export
+```
+
+The native command uses `LLMBAN_DB` (default: `data/llmban.sqlite`). On Windows,
+use `python` instead of `python3`. Omit `--project` for all projects, or use
+`--project ''` for unassigned cards. An unknown project produces an empty export;
+an invalid slug fails. Cards are ordered by workflow column, manual position,
+then ID; unknown columns follow known columns alphabetically. IDs, titles,
+projects, columns, descriptions and timestamps are included. Descriptions are
+literal text blocks so embedded Markdown cannot break the snapshot structure.
+Unchanged data produces identical UTF-8 output without an export-time timestamp.
+
+For Docker, rebuild the worker image after upgrading, then write the snapshot
+inside the private data volume and copy it to the host:
+
+```sh
+docker compose build worker
+docker compose run --rm --no-deps worker python3 bin/board.py export --output /data/board.md
+docker compose cp web:/data/board.md ./exports/board.md
+```
+
+Omit `--output` (or use `--output -`) for stdout. File output requires an existing
+parent directory and uses a private temporary file in that directory, followed
+by atomic replacement. Failures preserve an existing destination. A missing or
+uninitialized database fails instead of being created. No schema migration is
+needed; existing SQLite backup and restore commands are unchanged.
+
+Exports contain task content and may contain sensitive information. Keep them
+private and do not commit or automatically publish them. The `exports/` directory
+is ignored by Git; add an ignore rule for any alternative export location.
+Markdown snapshots are for review, not a replacement for SQLite backups.
+
 ## Upgrade
 
 1. Review the release notes and back up data/config/workspaces.

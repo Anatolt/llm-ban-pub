@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
-"""Initialize storage, add cards and inspect runs without HTTP credentials."""
+"""Initialize storage, add cards, export Markdown and inspect runs without HTTP credentials."""
 import argparse
 import json
+import sqlite3
 from storage import connect, initialize, event, next_position, now
 
 COLUMNS = ['man backlog', 'llm plan', 'llm planing', 'preflight', 'man plan',
@@ -19,7 +20,20 @@ def main():
     create.add_argument('--project', default='')
     create.add_argument('--column', default='man backlog', choices=COLUMNS)
     sub.add_parser('runs')
+    export = sub.add_parser('export', help='Export a read-only Markdown snapshot')
+    export.add_argument('--project', help='Filter by exact project slug; empty string selects unassigned cards')
+    export.add_argument('--output', default='-', help='Destination file (parent must exist), or - for UTF-8 stdout')
     args = p.parse_args()
+    if args.action == 'export':
+        import re
+        from board_export import export_board
+        if args.project and not re.fullmatch('[a-z0-9][a-z0-9-]{0,63}', args.project):
+            p.error('Invalid project slug')
+        try:
+            export_board(COLUMNS, args.project, args.output)
+        except (OSError, sqlite3.Error, ValueError) as exc:
+            p.exit(1, f'Export failed: {exc}\n')
+        return
     c = connect()
     try:
         initialize(c)
