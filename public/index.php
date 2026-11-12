@@ -186,89 +186,6 @@ function table_exists(string $name): bool {
     return (bool)$stmt->fetchColumn();
 }
 
-function work_active_statuses(): array {
-    return ['approved','queued','claiming','active','waiting','blocked','verifying','handoff','stale'];
-}
-
-function work_path_overlap(string $left, string $right): bool {
-    return $left === $right || str_starts_with($left, $right . '/') || str_starts_with($right, $left . '/');
-}
-
-function work_resources_overlap(array $left, array $right): bool {
-    if (($left['access_mode'] ?? '') === 'read' && ($right['access_mode'] ?? '') === 'read') return false;
-    $pathTypes = ['repo','worktree','path'];
-    $leftType = (string)$left['resource_type'];
-    $rightType = (string)$right['resource_type'];
-    $leftValue = (string)$left['normalized_selector'];
-    $rightValue = (string)$right['normalized_selector'];
-    if (in_array($leftType, $pathTypes, true) && in_array($rightType, $pathTypes, true)) {
-        return work_path_overlap($leftValue, $rightValue);
-    }
-    return $leftType === $rightType && $leftValue === $rightValue;
-}
-
-function load_current_work(bool $includeExpired = false): array {
-    if (!table_exists('work_plans')) return [];
-    $statuses = work_active_statuses();
-    $marks = implode(',', array_fill(0, count($statuses), '?'));
-    $sql = "SELECT * FROM work_plans WHERE status IN ($marks)";
-    $params = $statuses;
-    if (!$includeExpired) {
-        $now = gmdate('Y-m-d\TH:i:s\Z');
-        $sql .= " AND (lease_expires_at > ? OR lease_expires_at IS NULL OR lease_expires_at = '')";
-        $params[] = $now;
-    }
-    $sql .= " ORDER BY updated_at DESC";
-    $stmt = db()->prepare($sql);
-    $stmt->execute($params);
-    $plans = $stmt->fetchAll(PDO::FETCH_ASSOC);
-    $resourceStmt = db()->prepare('SELECT * FROM work_resources WHERE plan_id=? ORDER BY id');
-    $stepStmt = db()->prepare('SELECT * FROM work_steps WHERE plan_id=? ORDER BY position,id');
-    foreach ($plans as &$plan) {
-        $resourceStmt->execute([$plan['id']]);
-        $plan['resources'] = $resourceStmt->fetchAll(PDO::FETCH_ASSOC);
-        $stepStmt->execute([$plan['id']]);
-        $plan['steps'] = $stepStmt->fetchAll(PDO::FETCH_ASSOC);
-        $plan['warnings'] = [];
-    }
-    unset($plan);
-    $count = count($plans);
-    for ($i = 0; $i < $count; $i++) {
-        for ($j = $i + 1; $j < $count; $j++) {
-            $overlaps = [];
-            foreach ($plans[$i]['resources'] as $left) {
-                foreach ($plans[$j]['resources'] as $right) {
-                    if (work_resources_overlap($left, $right)) {
-                        $overlaps[] = $left['resource_type'] . ':' . $left['normalized_selector'];
-                    }
-                }
-            }
-            if ($overlaps) {
-                $warningI = ['severity' => 'overlap', 'task_name' => $plans[$j]['task_name'], 'resources' => array_values(array_unique($overlaps))];
-                $warningJ = ['severity' => 'overlap', 'task_name' => $plans[$i]['task_name'], 'resources' => array_values(array_unique($overlaps))];
-                $plans[$i]['warnings'][] = $warningI;
-                $plans[$j]['warnings'][] = $warningJ;
-            } elseif ($plans[$i]['project'] === $plans[$j]['project']) {
-                $plans[$i]['warnings'][] = ['severity' => 'same-project', 'task_name' => $plans[$j]['task_name'], 'resources' => []];
-                $plans[$j]['warnings'][] = ['severity' => 'same-project', 'task_name' => $plans[$i]['task_name'], 'resources' => []];
-            }
-        }
-    }
-    return $plans;
-}
-
-function load_work_plan(string $id): ?array {
-    if (!table_exists('work_plans') || !preg_match('/\A[a-zA-Z0-9_-]{1,128}\z/', $id)) return null;
-    $stmt = db()->prepare('SELECT * FROM work_plans WHERE id=?');
-    $stmt->execute([$id]);
-    $plan = $stmt->fetch(PDO::FETCH_ASSOC);
-    if (!$plan) return null;
-    $steps = db()->prepare('SELECT * FROM work_steps WHERE plan_id=? ORDER BY position,id');
-    $steps->execute([$id]);
-    $plan['steps'] = $steps->fetchAll(PDO::FETCH_ASSOC);
-    return $plan;
-}
-
 function project_filter_from_request(): ?string {
     if (!isset($_GET['project'])) return null;
     $project = trim((string)$_GET['project']);
@@ -372,14 +289,6 @@ function api_response(array $columns): void {
         ], JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
         exit;
     }
-    if ($path === BASE . '/api/work') {
-        $includeAll = isset($_GET['all']) && $_GET['all'] === '1';
-        echo json_encode([
-            'mode' => 'audit-only',
-            'plans' => load_current_work($includeAll),
-        ], JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
-        exit;
-    }
     http_response_code(404);
     echo json_encode(['error' => 'not found'], JSON_UNESCAPED_UNICODE);
     exit;
@@ -399,12 +308,6 @@ $editCard = $editId > 0 ? load_card($editId) : null;
 $formProject = $editCard['project'] ?? ($activeProject ?? '');
 $currentLanguage = normalize_language(get_setting('language', 'English'));
 $showSettings = isset($_GET['settings']);
-$showWork = (string)($_GET['view'] ?? '') === 'work';
-$showAllWork = isset($_GET['all']) && $_GET['all'] === '1';
-$workPlanId = $showWork ? (string)($_GET['plan'] ?? '') : '';
-$workDetail = $workPlanId !== '' ? load_work_plan($workPlanId) : null;
-if ($workPlanId !== '' && !$workDetail) http_response_code(404);
-$currentWork = $showWork && $workPlanId === '' ? load_current_work($showAllWork) : [];
 ?>
 <!doctype html>
 <html lang="en">
@@ -424,11 +327,10 @@ header{padding:14px 18px;border-bottom:1px solid var(--line);display:flex;gap:16
 input,textarea,select{width:100%;background:#10131a;color:var(--text);border:1px solid var(--line);border-radius:7px;padding:8px;font:inherit}textarea{min-height:140px;margin-top:10px}.grid{display:grid;gap:10px}.row{display:grid;grid-template-columns:1fr 220px 180px;gap:10px}@media(max-width:800px){.row{grid-template-columns:1fr}.board{padding:8px;gap:8px}.col{min-width:86vw}.col.compact{min-width:46px;width:46px}.col.compact.drag-over,.col.compact:focus-within{min-width:70vw;width:70vw}}
 .modal-overlay{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.6);z-index:9}.panel.modal{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:10;margin:0;width:98vw;height:96vh;max-width:none;box-shadow:0 10px 30px rgba(0,0,0,.5);display:flex;flex-direction:column}.panel.modal form{flex:1;display:flex;flex-direction:column;gap:10px}.panel.modal textarea{flex:1;margin-top:0}
 .btn,button{background:#2b3344;color:var(--text);border:1px solid #3b455a;border-radius:7px;padding:5px 12px;cursor:pointer;font:inherit;display:inline-block;text-align:center}.btn:hover,button:hover{background:#354059}.add-btn{font-weight:normal;font-size:18px;line-height:1;margin-left:auto}
-.work-list{display:grid;gap:12px;padding:14px;max-width:1400px}.work-card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px}.work-card.warning{border-color:#b8893c}.work-head{display:flex;gap:10px;align-items:center;flex-wrap:wrap}.badge{display:inline-block;border:1px solid var(--line);border-radius:999px;padding:2px 8px;color:var(--muted)}.badge.warn{border-color:#b8893c;color:#ffd98d}.work-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px;margin-top:12px}.work-grid h3{font-size:13px;color:var(--muted);margin:0 0 5px}.work-grid ul{margin:0;padding-left:20px}.work-empty{padding:32px;color:var(--muted)}
 </style>
 </head>
 <body>
-<header><h1>LLMBAN</h1><span class="muted">simple LLM kanban</span><a href="<?= BASE ?>/">Board</a><a href="<?= BASE ?>/?view=work">Current Work</a><a href="<?= $showWork ? BASE . '/api/work' : BASE . '/api/cards' . ($activeProject === null ? '' : '?project=' . h($activeProject === '' ? 'unassigned' : $activeProject)) ?>"><?= $showWork ? 'api/work' : 'api/cards' ?></a><a href="<?= board_url($activeProject, ['settings' => '1']) ?>">Settings</a><?php if (!$showWork): ?><nav class="project-filter"><a class="project-pill <?= $activeProject === null ? 'active' : '' ?>" href="<?= board_url(null) ?>">All</a><?php foreach ($projects as $projectRow): $project = (string)$projectRow['project']; $projectParam = $project === '' ? 'unassigned' : $project; $projectLabel = $project === '' ? 'Unassigned' : $project; ?><a class="project-pill <?= $activeProject === $project ? 'active' : '' ?>" href="<?= board_url($project) ?>"><?= h($projectLabel) ?> · <?= (int)$projectRow['count'] ?></a><?php endforeach; ?></nav><?php endif; ?></header>
+<header><h1>LLMBAN</h1><span class="muted">simple LLM kanban</span><a href="<?= BASE ?>/">Board</a><a href="<?= BASE ?>/api/cards<?= ($activeProject === null ? '' : '?project=' . h($activeProject === '' ? 'unassigned' : $activeProject)) ?>">api/cards</a><a href="<?= board_url($activeProject, ['settings' => '1']) ?>">Settings</a><nav class="project-filter"><a class="project-pill <?= $activeProject === null ? 'active' : '' ?>" href="<?= board_url(null) ?>">All</a><?php foreach ($projects as $projectRow): $project = (string)$projectRow['project']; $projectParam = $project === '' ? 'unassigned' : $project; $projectLabel = $project === '' ? 'Unassigned' : $project; ?><a class="project-pill <?= $activeProject === $project ? 'active' : '' ?>" href="<?= board_url($project) ?>"><?= h($projectLabel) ?> · <?= (int)$projectRow['count'] ?></a><?php endforeach; ?></nav></header>
 
 <?php if ($showSettings): ?>
 <div class="modal-overlay" onclick="location.href='<?= board_url($activeProject) ?>'"></div>
@@ -471,47 +373,6 @@ input,textarea,select{width:100%;background:#10131a;color:var(--text);border:1px
 </section>
 <?php endif; ?>
 
-<?php if ($showWork): ?>
-<main class="work-list">
-<?php if ($workPlanId !== ''): ?>
-<?php if (!$workDetail): ?><div class="work-empty">Task not found.</div><?php else: ?>
-<article class="work-card">
-  <a href="<?= BASE ?>/?view=work">← Current Work</a>
-  <div class="work-head"><h2><?= h($workDetail['task_name']) ?></h2><span class="badge"><?= h($workDetail['status']) ?></span></div>
-  <p class="muted"><?= h($workDetail['owner']) ?> / <?= h($workDetail['harness']) ?> · <?= h($workDetail['hostname']) ?> · <?= h($workDetail['updated_at']) ?></p>
-  <p><strong>Goal:</strong> <?= h($workDetail['goal']) ?></p>
-  <?php if ($workDetail['acceptance_criteria']): ?><p><strong>Acceptance:</strong> <?= h($workDetail['acceptance_criteria']) ?></p><?php endif; ?>
-  <p><strong>Current:</strong> <?= h($workDetail['current_step'] ?: '-') ?></p>
-  <?php if ($workDetail['next_action']): ?><p><strong>Next:</strong> <?= h($workDetail['next_action']) ?></p><?php endif; ?>
-  <h3>Steps and checks</h3>
-  <?php if (!$workDetail['steps']): ?><p class="muted">No steps recorded.</p><?php endif; ?>
-  <?php foreach ($workDetail['steps'] as $step): ?>
-  <section><p><span class="badge"><?= h($step['status']) ?></span> <?= h($step['title']) ?></p>
-  <?php if ($step['evidence']): ?><p><?= nl2br(h($step['evidence'])) ?></p><?php endif; ?></section>
-  <?php endforeach; ?>
-</article>
-<?php endif; ?>
-<?php else: ?>
-<div style="display:flex;gap:10px;align-items:center;margin-bottom:8px">
-  <a class="btn" style="<?= !$showAllWork ? 'background:var(--accent);color:#0f1115;font-weight:bold;' : '' ?>" href="<?= BASE ?>/?view=work">Live leases</a>
-  <a class="btn" style="<?= $showAllWork ? 'background:var(--accent);color:#0f1115;font-weight:bold;' : '' ?>" href="<?= BASE ?>/?view=work&amp;all=1">All unfinished</a>
-</div>
-<?php if (!$currentWork): ?><div class="work-empty">No active registered work. Registry mode: audit-only.</div><?php endif; ?>
-<?php foreach ($currentWork as $work): ?>
-<article class="work-card<?= count($work['warnings']) ? ' warning' : '' ?>">
-  <div class="work-head"><h2 style="margin:0;font-size:18px"><a href="<?= BASE ?>/?view=work&amp;plan=<?= rawurlencode($work['id']) ?>"><?= h($work['task_name']) ?></a></h2><span class="badge"><?= h($work['status']) ?></span><span class="badge"><?= h($work['project']) ?></span><?php if (count($work['warnings'])): ?><span class="badge warn"><?= count($work['warnings']) ?> warning(s)</span><?php endif; ?></div>
-  <p class="muted"><?= h($work['owner']) ?> / <?= h($work['harness']) ?> · <?= h($work['hostname']) ?>:<?= h($work['cwd']) ?> · heartbeat <?= h($work['heartbeat_at']) ?> · lease <?= h($work['lease_expires_at']) ?></p>
-  <p><strong>Current:</strong> <?= h($work['current_step'] ?: '-') ?> <span class="muted">Next: <?= h($work['next_action'] ?: '-') ?></span></p>
-  <div class="work-grid">
-    <section><h3>Resources</h3><ul><?php foreach ($work['resources'] as $resource): ?><li><code><?= h($resource['access_mode']) ?> <?= h($resource['resource_type']) ?>:<?= h($resource['normalized_selector']) ?></code></li><?php endforeach; ?><?php if (!$work['resources']): ?><li>none declared</li><?php endif; ?></ul></section>
-    <section><h3>Steps</h3><ul><?php foreach ($work['steps'] as $step): ?><li><code><?= h($step['status']) ?></code> <?= h($step['title']) ?></li><?php endforeach; ?><?php if (!$work['steps']): ?><li>none registered</li><?php endif; ?></ul></section>
-    <section><h3>Coordination</h3><ul><?php foreach ($work['warnings'] as $warning): ?><li><code><?= h($warning['severity']) ?></code> <?= h($warning['task_name']) ?><?= $warning['resources'] ? ' · ' . h(implode(', ', $warning['resources'])) : '' ?></li><?php endforeach; ?><?php if (!$work['warnings']): ?><li>no warnings</li><?php endif; ?></ul></section>
-  </div>
-</article>
-<?php endforeach; ?>
-<?php endif; ?>
-</main>
-<?php else: ?>
 <main class="board">
 <?php foreach ($columns as $col): $cardCount = count($byColumn[$col]); $isCompactLlm = in_array($col, $llmCompactColumns, true) && $cardCount === 0; ?>
 <section class="col<?= $isCompactLlm ? ' compact' : '' ?>" data-column="<?= h($col) ?>" data-compact="<?= $isCompactLlm ? '1' : '0' ?>" title="<?= h($col) ?> · <?= $cardCount ?>">
@@ -529,7 +390,6 @@ input,textarea,select{width:100%;background:#10131a;color:var(--text);border:1px
 </section>
 <?php endforeach; ?>
 </main>
-<?php endif; ?>
 
 <script>
 const base = <?= json_encode(BASE) ?>;

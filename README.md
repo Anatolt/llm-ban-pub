@@ -106,10 +106,9 @@ docker compose run --rm init python3 bin/board.py runs
 docker compose run --rm init python3 bin/memctl.py --json-min boot
 ```
 
-`Current Work` shows worker runs and manually registered work. The registry is
-advisory: overlap warnings do not enforce filesystem isolation. Its complete CLI
-is available with `python3 bin/memctl.py --help`; set `MEMCTL_DB`/`LLMBAN_DB` and
-`MEMCTL_SNAPSHOT_ROOT` when integrating your own agents.
+The work registry CLI is available with `python3 bin/memctl.py --help`; set
+`MEMCTL_DB`/`LLMBAN_DB` and `MEMCTL_SNAPSHOT_ROOT` when integrating your own agents.
+The registry is advisory: overlap warnings do not enforce filesystem isolation.
 
 Export a human-readable Markdown snapshot with `python3 bin/board.py export`
 (`--project my-app` filters cards; `--output exports/board.md` writes a file).

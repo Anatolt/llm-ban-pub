@@ -65,7 +65,7 @@ class WebTests(unittest.TestCase):
             return re.search('name="csrf" value="([a-f0-9]+)"', r.read().decode())[1]
 
     def test_authentication_required_for_html_and_api(self):
-        for path in ['/', '/api/cards', '/api/work']:
+        for path in ['/', '/api/cards']:
             with self.assertRaises(urllib.error.HTTPError) as ctx:
                 self.request(path, auth=False)
             self.assertEqual(ctx.exception.code, 401)
